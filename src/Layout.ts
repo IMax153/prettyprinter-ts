@@ -5,6 +5,7 @@ import { absurd, constFalse, constTrue, not, pipe } from 'fp-ts/function'
 import type { Option } from 'fp-ts/Option'
 import * as O from 'fp-ts/Option'
 import type { Reader } from 'fp-ts/Reader'
+import * as R from 'fp-ts/Reader'
 import * as RA from 'fp-ts/ReadonlyArray'
 
 import type { Doc } from './Doc'
@@ -18,6 +19,10 @@ import * as SDS from './SimpleDocStream'
 // model
 // -------------------------------------------------------------------------------------
 
+/**
+ * @category model
+ * @since 0.0.1
+ */
 export interface Layout<A> extends Reader<LayoutOptions, SimpleDocStream<A>> {}
 
 /**
@@ -132,6 +137,14 @@ export const LayoutOptions = (pageWidth: PageWidth): LayoutOptions => ({
  * The default layout options, which are suitable when you want to obtain output
  * but do not care about the details.
  *
+ * Defaults to:
+ *
+ * ```ts
+ * {
+ *   pageWidth: AvailablePerWidth(80, 1)
+ * }
+ * ```
+ *
  * @category constructors
  * @since 0.0.1
  */
@@ -145,7 +158,7 @@ export const defaultLayoutOptions = LayoutOptions(PW.defaultPageWidth)
  * @category destructors
  * @since 0.0.1
  */
-export const fold = <A, R>(patterns: {
+export const match = <A, R>(patterns: {
   readonly Nil: () => R
   readonly Cons: (indentation: number, document: Doc<A>, pipeline: LayoutPipeline<A>) => R
   readonly UndoAnn: (pipeline: LayoutPipeline<A>) => R
@@ -169,33 +182,34 @@ export const fold = <A, R>(patterns: {
 // layout algorithms
 // -------------------------------------------------------------------------------------
 
+const initialIndentation: <A>(stream: SimpleDocStream<A>) => Option<number> = SDS.match({
+  SFail: () => O.none,
+  SEmpty: () => O.none,
+  SChar: () => O.none,
+  SText: () => O.none,
+  SLine: (i) => O.some(i),
+  SAnnPush: (_, s) => initialIndentation(s),
+  SAnnPop: (s) => initialIndentation(s)
+})
+
+const selectNicer = <A>(
+  fits: FittingPredicate<A>,
+  lineIndent: number,
+  currentColumn: number,
+  x: SimpleDocStream<A>,
+  y: SimpleDocStream<A>
+): SimpleDocStream<A> => (fits(lineIndent, currentColumn, initialIndentation(y), x) ? x : y)
+
 const layoutWadlerLeijen = <A>(fits: FittingPredicate<A>, pageWidth: PageWidth) => (
   doc: Doc<A>
 ): SimpleDocStream<A> => {
-  const initialIndentation: (stream: SimpleDocStream<A>) => Option<number> = SDS.fold({
-    SFail: () => O.none,
-    SEmpty: () => O.none,
-    SChar: () => O.none,
-    SText: () => O.none,
-    SLine: (i) => O.some(i),
-    SAnnPush: (_, s) => initialIndentation(s),
-    SAnnPop: (s) => initialIndentation(s)
-  })
-
-  const selectNicer = (
-    nestingLevel: number,
-    currentColumn: number,
-    x: SimpleDocStream<A>,
-    y: SimpleDocStream<A>
-  ): SimpleDocStream<A> => (fits(nestingLevel, currentColumn, initialIndentation(y), x) ? x : y)
-
   const best = (nl: number, cc: number): ((pipeline: LayoutPipeline<A>) => SimpleDocStream<A>) =>
-    fold({
+    match({
       Nil: () => SDS.SEmpty,
       Cons: (i, d, ds) =>
         pipe(
           d,
-          D.fold<A, SDS.SimpleDocStream<A>>({
+          D.match<A, SDS.SimpleDocStream<A>>({
             Fail: () => SDS.SFail,
             Empty: () => pipe(ds, best(nl, cc)),
             Char: (c) => SDS.SChar(c, pipe(ds, best(nl, cc + 1))),
@@ -211,7 +225,7 @@ const layoutWadlerLeijen = <A>(fits: FittingPredicate<A>, pageWidth: PageWidth) 
             Union: (x, y) => {
               const _x = pipe(Cons(i, x, ds), best(nl, cc))
               const _y = pipe(Cons(i, y, ds), best(nl, cc))
-              return selectNicer(nl, cc, _x, _y)
+              return selectNicer(fits, nl, cc, _x, _y)
             },
             Column: (f) => pipe(Cons(i, f(cc), ds), best(nl, cc)),
             WithPageWidth: (f) => pipe(Cons(i, f(pageWidth), ds), best(nl, cc)),
@@ -225,7 +239,7 @@ const layoutWadlerLeijen = <A>(fits: FittingPredicate<A>, pageWidth: PageWidth) 
   return pipe(Cons(0, doc, Nil), best(0, 0))
 }
 
-const failsOnFirstLine: <A>(stream: SDS.SimpleDocStream<A>) => boolean = SDS.fold({
+const failsOnFirstLine: <A>(stream: SDS.SimpleDocStream<A>) => boolean = SDS.match({
   SFail: constTrue,
   SEmpty: constFalse,
   SChar: (_, s) => failsOnFirstLine(s),
@@ -253,29 +267,31 @@ export const layoutUnbounded: <A>(doc: Doc<A>) => SimpleDocStream<A> = layoutWad
  *
  * `layoutPretty` commites to rendering something in a certain way if the next
  * element fits the layout constrants. In other words, it has one `SimpleDocStream`
- * element lookahead when rendering. Consider using the smarter, but slightly
- * less performant `layoutSmart` layout algorithm if the results seem to run
- * off to the right before having lots of line breaks.
+ * element lookahead when rendering.
+ *
+ * Consider using the smarter, but slightly less performant `layoutSmart`
+ * algorithm if the results seem to run off to the right before having lots of
+ * line breaks.
  *
  * @category layout algorithms
  * @since 0.0.1
  */
 export const layoutPretty = <A>(doc: Doc<A>): Layout<A> => ({ pageWidth }) => {
-  const fits: (width: number) => (stream: SimpleDocStream<A>) => boolean = (w) =>
-    w < 0
+  const fits = (width: number): ((stream: SimpleDocStream<A>) => boolean) =>
+    width < 0
       ? constFalse
-      : SDS.fold({
-          SFail: () => false,
-          SEmpty: () => true,
-          SChar: (_, x) => pipe(x, fits(w - 1)),
-          SText: (t, x) => pipe(x, fits(w - t.length)),
-          SLine: () => true,
-          SAnnPush: (_, x) => pipe(x, fits(w)),
-          SAnnPop: (x) => pipe(x, fits(w))
+      : SDS.match({
+          SFail: constFalse,
+          SEmpty: constTrue,
+          SChar: (_, x) => pipe(x, fits(width - 1)),
+          SText: (t, x) => pipe(x, fits(width - t.length)),
+          SLine: constTrue,
+          SAnnPush: (_, x) => pipe(x, fits(width)),
+          SAnnPop: (x) => pipe(x, fits(width))
         })
   return pipe(
     pageWidth,
-    PW.fold({
+    PW.match({
       AvailablePerLine: (lw, rfrac) =>
         pipe(
           doc,
@@ -290,61 +306,194 @@ export const layoutPretty = <A>(doc: Doc<A>): Layout<A> => ({ pageWidth }) => {
 }
 
 /**
+ * A layout algorithm with more look ahead than `layoutPretty`, which will introduce
+ * line breaks into a document earlier if the content does not, or will not, fit onto
+ * one line.
+ *
+ * @example
+ * import { flow, pipe } from 'fp-ts/function'
+ * import * as M from 'fp-ts/Monoid'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import type { Layout, LayoutOptions } from 'prettyprinter-ts/lib/Layout'
+ * import * as L from 'prettyprinter-ts/lib/Layout'
+ * import type { PageWidth } from 'prettyprinter-ts/lib/PageWidth'
+ * import * as PW from 'prettyprinter-ts/lib/PageWidth'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * // Consider the following python-ish document:
+ * const fun = <A>(doc: Doc<A>): Doc<A> =>
+ *   D.hcat([
+ *     pipe(
+ *       D.hcat<A>([D.text('fun('), D.softLineBreak, doc]),
+ *       D.hang(2)
+ *     ),
+ *     D.text(')')
+ *   ])
+ *
+ * const funs = flow(fun, fun, fun, fun, fun)
+ *
+ * const doc: Doc<never> = funs(D.align(D.list(D.words('abcdef ghijklm'))))
+ *
+ * // The document will be rendered using the following pipeline, where the choice
+ * // of layout algorithm has been left open:
+ * const dashes: Doc<never> = D.text(pipe(RA.replicate(26 - 2, '-'), M.fold(M.monoidString)))
+ * const hr: Doc<never> = D.hcat([D.vbar, dashes, D.vbar])
+ *
+ * const pageWidth: PageWidth = PW.AvailablePerLine(26, 1)
+ * const layoutOptions: LayoutOptions = L.LayoutOptions(pageWidth)
+ *
+ * const render = <A>(doc: Doc<A>) => (layoutAlgorithm: (doc: Doc<A>) => Layout<A>): string =>
+ *   pipe(
+ *     layoutOptions,
+ *     layoutAlgorithm(
+ *       D.vsep<A>([hr, doc, hr])
+ *     ),
+ *     R.renderS
+ *   )
+ *
+ * // If rendered using `layoutPretty`, with a page width of `26` characters per line,
+ * // all the calls to `fun` will fit into the first line. However, this exceeds the
+ * // desired `26` character page width.
+ * console.log(pipe(L.layoutPretty, render(doc)))
+ * // |------------------------|
+ * // fun(fun(fun(fun(fun(
+ * //                   [ abcdef
+ * //                   , ghijklm ])))))
+ * // |------------------------|
+ *
+ * // The same document, rendered with `layoutSmart`, fits the layout contstraints:
+ * console.log(pipe(L.layoutSmart, render(doc)))
+ * // |------------------------|
+ * // fun(
+ * //   fun(
+ * //     fun(
+ * //       fun(
+ * //         fun(
+ * //           [ abcdef
+ * //           , ghijklm ])))))
+ * // |------------------------|
+ *
+ * // The key difference between `layoutPretty` and `layoutSmart` is that the
+ * // latter will check the potential document until it encounters a line with the
+ * // same indentation or less than the start of the document. Any line encountered
+ * // earlier is assumed to belong to the same syntactic structure. In contrast,
+ * // `layoutPretty` checks only the first line.
+ *
+ * // Consider for example the question of whether the `A`s fit into the document
+ * // below:
+ * // > 1 A
+ * // > 2   A
+ * // > 3  A
+ * // > 4 B
+ * // > 5   B
+ *
+ * // `layoutPretty` will check only the first line, ignoring whether the second line
+ * // may already be too wide. In contrast, `layoutSmart` stops only once it reaches
+ * // the fourth line 4, where the `B` has the same indentation as the first `A`.
+ *
  * @category layout algorithms
  * @since 0.0.1
  */
-export const layoutSmart = <A>(doc: Doc<A>): Layout<A> => ({ pageWidth }) =>
+export const layoutSmart = <A>(doc: Doc<A>): Layout<A> =>
   pipe(
-    pageWidth,
-    PW.fold({
-      AvailablePerLine: (lw, rfrac) => {
-        const fits = (
-          nl: number,
-          cc: number,
-          iy: Option<number>
-        ): ((stream: SimpleDocStream<A>) => boolean) => {
-          const availableWidth = PW.remainingWidth(lw, rfrac, nl, cc)
+    R.ask<LayoutOptions>(),
+    R.map(({ pageWidth }) =>
+      pipe(
+        pageWidth,
+        PW.match({
+          AvailablePerLine: (lineWidth, ribbonFraction) => {
+            const fits = (
+              lineIndent: number,
+              currentColumn: number,
+              initialIndentY: Option<number>
+            ): ((stream: SimpleDocStream<A>) => boolean) => {
+              const availableWidth = PW.remainingWidth(
+                lineWidth,
+                ribbonFraction,
+                lineIndent,
+                currentColumn
+              )
 
-          const minNestingLevel = pipe(
-            iy,
-            O.fold(
-              // y is definitely not a hanging layout - let's check x with
-              // the same minNestingLevel that any subsequent lines with
-              // the same indentation use
-              () => cc,
-              // y could be a (less wide) hanging layout - let's check x a
-              // bit more thoroughly to make sure we do not misss a potentially
-              // better fitting y
-              (i) => Math.min(i, cc)
+              const minNestingLevel = pipe(
+                initialIndentY,
+                O.fold(
+                  // y is definitely not a hanging layout - let's check x with
+                  // the same minNestingLevel that any subsequent lines with
+                  // the same indentation use
+                  () => currentColumn,
+                  // y could be a (less wide) hanging layout - let's check x a
+                  // bit more thoroughly to make sure we do not miss a potentially
+                  // better fitting y
+                  (i) => Math.min(i, currentColumn)
+                )
+              )
+
+              const go = (width: number): ((stream: SimpleDocStream<A>) => boolean) =>
+                width < 0
+                  ? constFalse
+                  : SDS.match({
+                      SFail: constFalse,
+                      SEmpty: constTrue,
+                      SChar: (_, x) => pipe(x, go(width - 1)),
+                      SText: (t, x) => pipe(x, go(width - t.length)),
+                      SLine: (i, x) => (minNestingLevel < i ? pipe(x, go(i - lineWidth)) : true),
+                      SAnnPush: (_, x) => pipe(x, go(width)),
+                      SAnnPop: (x) => pipe(x, go(width))
+                    })
+
+              return go(availableWidth)
+            }
+
+            return pipe(
+              doc,
+              layoutWadlerLeijen((nl, cc, iy, sds) => pipe(sds, fits(nl, cc, iy)), pageWidth)
             )
-          )
-
-          const go: (width: number) => (stream: SimpleDocStream<A>) => boolean = (w) =>
-            w < 0
-              ? constFalse
-              : SDS.fold({
-                  SFail: () => false,
-                  SEmpty: () => true,
-                  SChar: (_, x) => pipe(x, go(w - 1)),
-                  SText: (t, x) => pipe(x, go(w - t.length)),
-                  SLine: (i, x) => (minNestingLevel < i ? pipe(x, go(lw - i)) : true),
-                  SAnnPush: (_, x) => pipe(x, go(w)),
-                  SAnnPop: (x) => pipe(x, go(w))
-                })
-
-          return go(availableWidth)
-        }
-
-        return pipe(
-          doc,
-          layoutWadlerLeijen((nl, cc, iy, sds) => pipe(sds, fits(nl, cc, iy)), pageWidth)
-        )
-      },
-      Unbounded: () => pipe(doc, layoutUnbounded)
-    })
+          },
+          Unbounded: () => pipe(doc, layoutUnbounded)
+        })
+      )
+    )
   )
 
 /**
+ * A layout algorithm which will lay out a document without adding any
+ * indentation and without preserving annotations.
+ *
+ * Since no pretty-printing is involved, this layout algorithm is ver fast. The
+ * resulting output contains fewer characters than a pretty-printed version and
+ * can be used for output that is read by other programs.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as L from 'prettyprinter-ts/lib/Layout'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = pipe(
+ *   D.vsep([
+ *     D.text('lorem'),
+ *     D.text('ipsum'),
+ *     pipe(D.vsep([D.text('dolor'), D.text('sit')]), D.hang(4))
+ *   ]),
+ *   D.hang(4)
+ * )
+ *
+ * console.log(R.render(doc))
+ * // lorem
+ * //     ipsum
+ * //     dolor
+ * //         sit
+ *
+ * console.log(pipe(doc, L.layoutCompact, R.renderS))
+ * // lorem
+ * // ipsum
+ * // dolor
+ * // sit
+ *
  * @category layout algorithms
  * @since 0.0.1
  */
@@ -355,7 +504,7 @@ export const layoutCompact = <A, B>(doc: Doc<A>): SimpleDocStream<B> => {
       (d, ds) =>
         pipe(
           d,
-          D.fold({
+          D.match({
             Fail: () => SDS.SFail,
             Empty: () => pipe(ds, scan(col)),
             Char: (c) => SDS.SChar(c, pipe(ds, scan(col + 1))),

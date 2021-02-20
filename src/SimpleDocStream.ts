@@ -125,38 +125,66 @@ export interface SAnnPop<A> {
 // constructors
 // -------------------------------------------------------------------------------------
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SFail: SimpleDocStream<never> = {
   _tag: 'SFail'
 }
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SEmpty: SimpleDocStream<never> = {
   _tag: 'SEmpty'
 }
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SChar = <A>(char: string, stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
   _tag: 'SChar',
   char,
   stream
 })
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SText = <A>(text: string, stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
   _tag: 'SText',
   text,
   stream
 })
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SLine = <A>(indentation: number, stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
   _tag: 'SLine',
   indentation,
   stream
 })
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SAnnPush = <A>(annotation: A, stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
   _tag: 'SAnnPush',
   annotation,
   stream
 })
 
+/**
+ * @category constructors
+ * @since 0.0.1
+ */
 export const SAnnPop = <A>(stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
   _tag: 'SAnnPop',
   stream
@@ -170,7 +198,7 @@ export const SAnnPop = <A>(stream: SimpleDocStream<A>): SimpleDocStream<A> => ({
  * @category destructors
  * @since 0.0.1
  */
-export const fold = <A, R>(patterns: {
+export const match = <A, R>(patterns: {
   readonly SFail: () => R
   readonly SEmpty: () => R
   readonly SChar: (char: string, stream: SimpleDocStream<A>) => R
@@ -224,7 +252,7 @@ export const map = <A, B>(f: (a: A) => B): ((fa: SimpleDocStream<A>) => SimpleDo
  * @since 0.0.1
  */
 export const foldMap = <M>(M: Monoid<M>) => <A>(f: (a: A) => M): ((fa: SimpleDocStream<A>) => M) =>
-  fold({
+  match({
     SFail: () => M.empty,
     SEmpty: () => M.empty,
     SChar: (_, rest) => pipe(rest, foldMap(M)(f)),
@@ -241,7 +269,7 @@ export const foldMap = <M>(M: Monoid<M>) => <A>(f: (a: A) => M): ((fa: SimpleDoc
 export const traverse: PipeableTraverse1<URI> = <F>(F: Applicative<F>) => <A, B>(
   f: (a: A) => HKT<F, B>
 ): ((ta: SimpleDocStream<A>) => HKT<F, SimpleDocStream<B>>) => {
-  const go: (stream: SimpleDocStream<A>) => HKT<F, SimpleDocStream<B>> = fold<
+  const go: (stream: SimpleDocStream<A>) => HKT<F, SimpleDocStream<B>> = match<
     A,
     HKT<F, SimpleDocStream<B>>
   >({
@@ -272,7 +300,7 @@ export const traverse: PipeableTraverse1<URI> = <F>(F: Applicative<F>) => <A, B>
 export const reAnnotateS = <A, B>(
   f: (a: A) => B
 ): ((stream: SimpleDocStream<A>) => SimpleDocStream<B>) =>
-  fold<A, SimpleDocStream<B>>({
+  match<A, SimpleDocStream<B>>({
     SFail: () => SFail,
     SEmpty: () => SEmpty,
     SChar: (c, rest) => SChar(c, reAnnotateS(f)(rest)),
@@ -291,7 +319,7 @@ export const reAnnotateS = <A, B>(
 export const unAnnotateS = <A>(stream: SimpleDocStream<A>): SimpleDocStream<void> =>
   pipe(
     stream,
-    fold<A, SimpleDocStream<void>>({
+    match<A, SimpleDocStream<void>>({
       SFail: () => SFail,
       SEmpty: () => SEmpty,
       SChar: (c, rest) => SChar(c, unAnnotateS(rest)),
@@ -321,7 +349,7 @@ export const alterAnnotationS = <A, B>(
   const go = (
     stack: ReadonlyArray<AnnotationRemoval>
   ): ((stream: SimpleDocStream<A>) => SimpleDocStream<B>) =>
-    fold<A, SimpleDocStream<B>>({
+    match<A, SimpleDocStream<B>>({
       SFail: () => SFail,
       SEmpty: () => SEmpty,
       SChar: (c, rest) => SChar(c, pipe(rest, go(stack))),
@@ -426,7 +454,7 @@ export const removeTrailingWhitespace = <A>(stream: SimpleDocStream<A>): SimpleD
       case 'AnnotationLevel':
         // No whitespace is stripped inside annotated documents given that whitespace may be
         // relevant inside an annotated document
-        return fold<A, SimpleDocStream<A>>({
+        return match<A, SimpleDocStream<A>>({
           SFail: () => SFail,
           SEmpty: () => SEmpty,
           SChar: (c, rest) => SChar(c, pipe(rest, go(state))),
@@ -441,7 +469,7 @@ export const removeTrailingWhitespace = <A>(stream: SimpleDocStream<A>): SimpleD
       case 'RecordedWhitespace':
         // All spaces/lines encountered are recored and once proper text starts again,
         // only the necessary ones are released
-        return fold<A, SimpleDocStream<A>>({
+        return match<A, SimpleDocStream<A>>({
           SFail: () => SFail,
           SEmpty: () => prependEmptyLines(state.withheldLines)(SEmpty),
           SChar: (c, rest) =>
@@ -504,6 +532,10 @@ declare module 'fp-ts/HKT' {
   }
 }
 
+/**
+ * @category instances
+ * @since 0.0.1
+ */
 export const Functor: Functor1<URI> = {
   URI,
   map: map_

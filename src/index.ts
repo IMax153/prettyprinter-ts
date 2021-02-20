@@ -1,12 +1,26 @@
 import { pipe } from 'fp-ts/function'
-import * as M from 'fp-ts/Monoid'
-import * as RA from 'fp-ts/ReadonlyArray'
 
 import * as D from './Doc'
 import * as L from './Layout'
 import * as R from './Render'
 
-const line = pipe(RA.replicate(26 - 2, '-'), M.fold(M.monoidString))
-const hr = M.fold(D.getMonoid<void>())([D.char('|'), D.text(line), D.char('|')])
+const doc = pipe(
+  D.vsep([
+    D.text('lorem'),
+    D.text('ipsum'),
+    pipe(D.vsep([D.text('dolor'), D.text('sit')]), D.hang(4))
+  ]),
+  D.hang(4)
+)
 
-console.log(R.renderS(pipe(L.defaultLayoutOptions, L.layoutSmart(hr))))
+console.log(R.render(doc))
+// lorem
+//     ipsum
+//     dolor
+//         sit
+
+console.log(pipe(doc, L.layoutCompact, R.renderS))
+// lorem
+// ipsum
+// dolor
+// sit

@@ -46,7 +46,7 @@ export const renderUnbounded = <A>(doc: Doc<A>): string =>
  * @category rendering algorithms
  * @since 0.0.1
  */
-export const renderS: <A>(stream: SimpleDocStream<A>) => string = SDS.fold({
+export const renderS: <A>(stream: SimpleDocStream<A>) => string = SDS.match({
   SFail: () => absurd<string>(M.monoidString.empty as never),
   SEmpty: () => M.monoidString.empty,
   SChar: (c, x) => foldS([c, renderS(x)]),

@@ -91,7 +91,7 @@ export const NeverFlat: FlattenResult<never> = {
  * @category destructors
  * @since 0.0.1
  */
-export const fold = <A, R>(patterns: {
+export const match = <A, R>(patterns: {
   readonly Flattened: (value: A) => R
   readonly AlreadyFlat: () => R
   readonly NeverFlat: () => R
@@ -126,7 +126,7 @@ const map_: Functor1<URI>['map'] = (fa, f) => pipe(fa, map(f))
  * @since 0.0.1
  */
 export const map = <A, B>(f: (a: A) => B): ((fa: FlattenResult<A>) => FlattenResult<B>) =>
-  fold<A, FlattenResult<B>>({
+  match<A, FlattenResult<B>>({
     Flattened: (a) => Flattened(f(a)),
     AlreadyFlat: () => AlreadyFlat,
     NeverFlat: () => NeverFlat
@@ -142,7 +142,7 @@ export const map = <A, B>(f: (a: A) => B): ((fa: FlattenResult<A>) => FlattenRes
 const flatten = <A>(doc: Doc<A>): Doc<A> =>
   pipe(
     doc,
-    D.fold<A, Doc<A>>({
+    D.match<A, Doc<A>>({
       Fail: () => doc,
       Empty: () => doc,
       Char: () => doc,
@@ -179,7 +179,7 @@ const flatten = <A>(doc: Doc<A>): Doc<A> =>
 export const changesUponFlattening = <A>(doc: Doc<A>): FlattenResult<Doc<A>> =>
   pipe(
     doc,
-    D.fold<A, FlattenResult<Doc<A>>>({
+    D.match<A, FlattenResult<Doc<A>>>({
       Empty: () => AlreadyFlat,
       Char: () => AlreadyFlat,
       Text: () => AlreadyFlat,

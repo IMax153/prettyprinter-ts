@@ -105,12 +105,11 @@ export const Deep: FusionDepth = 'Deep'
  * It is therefore a good idea to run `fuse` on concatenations of lots of small
  * strings that are used many times.
  *
- *
  * @category optimizers
  * @since 0.0.1
  */
 export const optimize = <A>(doc: Doc<A>): Optimize<A> => (depth) => {
-  const go: (x: Doc<A>) => Doc<A> = D.fold<A, Doc<A>>({
+  const go: (x: Doc<A>) => Doc<A> = D.match<A, Doc<A>>({
     Fail: () => D.Fail,
     Empty: () => D.Empty,
     Char: (c) => D.Char(c),

@@ -2,7 +2,7 @@
  * @since 0.0.1
  */
 import type { Endomorphism } from 'fp-ts/function'
-import { absurd, flow } from 'fp-ts/function'
+import { absurd, pipe } from 'fp-ts/function'
 import * as Ord from 'fp-ts/Ord'
 
 // -------------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ export const defaultPageWidth: PageWidth = AvailablePerLine(80, 1)
  * @category destructors
  * @since 0.0.1
  */
-export const fold = <R>(patterns: {
+export const match = <R>(patterns: {
   readonly AvailablePerLine: (lineWidth: number, ribbonFraction: number) => R
   readonly Unbounded: () => R
 }): ((pageWidth: PageWidth) => R) => {
@@ -127,7 +127,7 @@ export const remainingWidth = (
   currentColumn: number
 ): number => {
   const columnsLeftInLine = lineLength - currentColumn
-  const ribbonWidth = flow(floor, min(lineLength), max(0))(lineLength * ribbonFraction)
+  const ribbonWidth = pipe(lineLength * ribbonFraction, floor, min(lineLength), max(0))
   const columnsLeftInRibbon = lineIndent + ribbonWidth - currentColumn
   return min(columnsLeftInLine)(columnsLeftInRibbon)
 }

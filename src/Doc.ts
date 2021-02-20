@@ -15,15 +15,6 @@
  * - mouseover text (e.g., when rendering to rich HTML)
  * - whether to show something or not (to allow simple or detailed versions)
  *
- * The simplest way to display a `Doc` is via its `Show` instance.
- *
- * @example
- * import * as D from 'prettyprinter-ts/lib/Doc'
- *
- * console.log(D.showDoc.show(D.vsep([D.text("hello"), D.text("world")])))
- * // hello
- * // world
- *
  * @since 0.0.1
  */
 import { absurd, constant, flow, pipe } from 'fp-ts/function'
@@ -195,6 +186,7 @@ export interface Column<A> {
 
 /**
  * Represents a document that reacts to the current page width.
+ *
  * @category model
  * @since 0.0.1
  */
@@ -205,6 +197,7 @@ export interface WithPageWidth<A> {
 
 /**
  * Represents a document that reacts to the current nesting level.
+ *
  * @category model
  * @since 0.0.1
  */
@@ -352,7 +345,11 @@ export const Annotated = <A>(annotation: A, doc: Doc<A>): Doc<A> => ({
 // destructors
 // -------------------------------------------------------------------------------------
 
-export const fold = <A, R>(patterns: {
+/**
+ * @category destructors
+ * @since 0.0.1
+ */
+export const match = <A, R>(patterns: {
   readonly Fail: () => R
   readonly Empty: () => R
   readonly Char: (char: string) => R
@@ -559,6 +556,54 @@ export const vbar: Doc<never> = Char('|')
 export const space: Doc<never> = Char(' ')
 
 /**
+ * Encloses the input document in parentheses (`()`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const parens = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(lparen, rparen))
+
+/**
+ * Encloses the input document in angle brackets (`<>`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const angles = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(langle, rangle))
+
+/**
+ * Encloses the input document in brackets (`[]`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const brackets = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(lbracket, rbracket))
+
+/**
+ * Encloses the input document in braces (`{}`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const braces = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(lbrace, rbrace))
+
+/**
+ * Encloses the input document in single quotes (`''`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const squotes = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(squote, squote))
+
+/**
+ * Encloses the input document in double quotes (`""`).
+ *
+ * @category primitive combinators
+ * @since 0.0.1
+ */
+export const dquotes = <A>(doc: Doc<A>): Doc<A> => pipe(doc, enclose<A>(dquote, dquote))
+
+/**
  * A document that cannot be rendered.
  *
  * Generally occurs when flattening a line. The layout algorithms will
@@ -579,14 +624,15 @@ export const fail: Doc<never> = Fail
  *
  * @example
  * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
- * const doc =D.vsep([
+ * const doc = D.vsep([
  *   D.text('hello'),
  *   D.parens(D.empty), // `parens` for visibility purposes only
  *   D.text('world')
  * ])
  *
- * console.log(D.showDoc.show(doc))
+ * console.log(R.render(doc))
  * // hello
  * // ()
  * // world
@@ -621,12 +667,12 @@ export const text: <A>(text: string) => Doc<A> = Text
 
 /**
  * The `line` document advances to the next line and indents to the
- * current nesting level.
- *
- * `line` behaves like `space` if the line break is undone by `group`.
+ * current nesting level. However, `line` will behave like `space`
+ * if the line break is undone by `group`.
  *
  * @example
  * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
  * const doc = D.hcat([
  *   D.text('lorem ipsum'),
@@ -634,11 +680,11 @@ export const text: <A>(text: string) => Doc<A> = Text
  *   D.text('dolor sit amet')
  * ])
  *
- * console.log(D.showDoc.show(doc))
+ * console.log(R.render(doc))
  * // lorem ipsum
  * // dolor sit amet
  *
- * console.log(D.showDoc.show(D.group(doc)))
+ * console.log(R.render(D.group(doc)))
  * // lorem ipsum dolor sit amet
  *
  * @category primitive combinators
@@ -652,6 +698,7 @@ export const line: Doc<never> = FlatAlt(Line, Char(' '))
  *
  * @example
  * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
  * const doc = D.hcat([
  *   D.text('lorem ipsum'),
@@ -659,11 +706,11 @@ export const line: Doc<never> = FlatAlt(Line, Char(' '))
  *   D.text('dolor sit amet')
  * ])
  *
- * console.log(D.showDoc.show(doc))
+ * console.log(R.render(doc))
  * // lorem ipsum
  * // dolor sit amet
  *
- * console.log(D.showDoc.show(D.group(doc)))
+ * console.log(R.render(D.group(doc)))
  * // lorem ipsumdolor sit amet
  *
  * @category primitive combinators
@@ -676,9 +723,10 @@ export const lineBreak: Doc<never> = FlatAlt(Line, Empty)
  * fits onto the page, otherwise it behaves like `line`.
  *
  * @example
+ * import { pipe } from 'fp-ts/function'
+ *
  * import * as D from 'prettyprinter-ts/lib/Doc'
- * import * as L from 'prettyprinter-ts/lib/Layout'
- * import * as PW from 'prettyprinter-ts/lib/PageWidth'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
  * // Here we have enough space to put everything onto one line:
  *
@@ -688,13 +736,13 @@ export const lineBreak: Doc<never> = FlatAlt(Line, Empty)
  *   D.text('dolor sit amet')
  * ])
  *
- * console.log(pipe(doc, L.pretty(PW.AvailablePerLine(80, 1))))
+ * console.log(pipe(doc, R.renderWidth(80)))
  * // lorem ipsum dolor sit amet
  *
  * // If the page width is narrowed to `10`, the layout algorithm will
  * // introduce a line break:
  *
- * console.log(pipe(doc, L.pretty(PW.AvailablePerLine(10, 1))))
+ * console.log(pipe(doc, R.renderWidth(10)))
  * // lorem ipsum
  * // dolor sit amet
  *
@@ -709,25 +757,24 @@ export const softLine: Doc<never> = Union(Char(' '), Line)
  * (instead of `space`).
  *
  * @example
+ * import { pipe } from 'fp-ts/function'
+ *
  * import * as D from 'prettyprinter-ts/lib/Doc'
- * import * as L from 'prettyprinter-ts/lib/Layout'
- * import * as PW from 'prettyprinter-ts/lib/PageWidth'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
  * // With enough space, we get direct concatenation of documents:
- *
  * const doc = D.hcat([
  *   D.text('ThisText'),
  *   D.softLineBreak,
  *   D.text('IsWayTooLong')
  * ])
  *
- * console.log(pipe(doc, L.pretty(PW.AvailablePerLine(80, 1))))
+ * console.log(pipe(doc, R.renderWidth(80)))
  * // ThisTextIsWayTooLong
  *
  * // If the page width is narrowed to `10`, the layout algorithm will
  * // introduce a line break:
- *
- * console.log(pipe(doc, L.pretty(PW.AvailablePerLine(10, 1))))
+ * console.log(pipe(doc, R.renderWidth(10)))
  * // ThisText
  * // IsWayTooLong
  *
@@ -742,9 +789,10 @@ export const softLineBreak: Doc<never> = Union(Empty, Line)
  * `group`'ed.
  *
  * @example
+ * import { pipe } from 'fp-ts/function'
+ *
  * import * as D from 'prettyprinter-ts/lib/Doc'
- * import * as L from 'prettyprinter-ts/lib/Layout'
- * import * as PW from 'prettyprinter-ts/lib/PageWidth'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
  * const doc = D.hcat([
  *   D.text('lorem ipsum'),
@@ -752,7 +800,7 @@ export const softLineBreak: Doc<never> = Union(Empty, Line)
  *   D.text('dolor sit amet')
  * ])
  *
- * console.log(pipe(doc, L.pretty(PW.AvailablePerLine(1000, 1))))
+ * console.log(pipe(doc, R.renderWidth(1000)))
  * // lorem ipsum
  * // dolor sit amet
  *
@@ -762,6 +810,38 @@ export const softLineBreak: Doc<never> = Union(Empty, Line)
 export const hardLine: Doc<never> = Line
 
 /**
+ * The `nest` combinator will layout a document with the current nesting
+ * level (indentation of the following lines) increased by the specified
+ * `indent`. Negative values are allowed and will decrease the nesting
+ * level accordingly.
+ *
+ * See also:
+ * * [`hang`](#hang): nest a document relative to the current cursor
+ * position instead of the current nesting level
+ * * [`align`](#align): set the nesting level to the current cursor
+ * position
+ * * [`indent`](#indent): increase the indentation on the spot, padding
+ * any empty space with spaces
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.vsep([
+ *   pipe(D.vsep(D.words('lorem ipsum dolor')), D.nest(4)),
+ *   D.text('sit'),
+ *   D.text('amet')
+ * ])
+ *
+ * console.log(R.render(doc))
+ * // lorem
+ * //     ipsum
+ * //     dolor
+ * // sit
+ * // amet
+ *
  * @category primitive combinators
  * @since 0.0.1
  */
@@ -773,6 +853,13 @@ export const nest = (indent: number) => <A>(doc: Doc<A>): Doc<A> =>
 // -------------------------------------------------------------------------------------
 
 /**
+ * The `group` combinator attempts to lay out a document onto a single line by
+ * removing the contained line breaks. If the result does not fit the page, or
+ * if a `hardLine` prevents flattening the document, `x` is laid out without
+ * any changes.
+ *
+ * The `group` function is key to layouts that adapt to available space nicely.
+ *
  * @category alternative combinators
  * @since 0.0.1
  */
@@ -780,7 +867,7 @@ export const group = <A>(doc: Doc<A>): Doc<A> => {
   const group_ = (a: Doc<A>): Doc<A> =>
     pipe(
       F.changesUponFlattening(a),
-      F.fold({
+      F.match({
         Flattened: (b) => Union(b, a),
         AlreadyFlat: () => a,
         NeverFlat: () => a
@@ -788,7 +875,7 @@ export const group = <A>(doc: Doc<A>): Doc<A> => {
     )
   return pipe(
     doc,
-    fold({
+    match({
       Fail: () => group_(doc),
       Empty: () => group_(doc),
       Char: () => group_(doc),
@@ -797,7 +884,7 @@ export const group = <A>(doc: Doc<A>): Doc<A> => {
       FlatAlt: (a, b) =>
         pipe(
           F.changesUponFlattening(b),
-          F.fold({
+          F.match({
             Flattened: (b_) => Union(b_, a),
             AlreadyFlat: () => Union(b, a),
             NeverFlat: () => a
@@ -815,46 +902,187 @@ export const group = <A>(doc: Doc<A>): Doc<A> => {
 }
 
 /**
- * The `flatAlt` document will render as `x` by default. However, when
+ * The `flatAlt` document will render `x` by default. However, when
  * `group`ed, `y` will be preferred with `x` as the fallback for cases
  * where `y` does not fit onto the page.
  *
+ * **NOTE:**
+ * Users should be careful to ensure that `x` is less wide than `y`.
+ * Otherwise, if `y` ends up not fitting the page, then the layout
+ * algorithms will fall back to an even wider layout.
+ *
  * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
  * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
- * const doc = pipe(D.char('a'), D.flatAlt(D.char('b')))
- * // TODO
+ * const open = D.flatAlt(D.empty, D.text('{ '))
+ * const close = D.flatAlt(D.empty, D.text(' }'))
+ * const separator = D.flatAlt(D.empty, D.text('; '))
  *
+ * const prettyDo = <A>(xs: ReadonlyArray<Doc<A>>): Doc<A> =>
+ *   D.group(D.hsep([D.text('do'), D.align(pipe(xs, D.encloseSep<A>(open, close, separator)))]))
+ *
+ * const statements = [
+ *   D.text('name:_ <- getArgs'),
+ *   D.text('let greet = "Hello, " <> name"'),
+ *   D.text('putStrLn greet')
+ * ]
+ *
+ * // If it fits, then the content is put onto a single line with the `{;}` style
+ * console.log(pipe(prettyDo(statements), R.renderWidth(80)))
+ * // do { name:_ <- getArgs; let greet = "Hello, " <> name"; putStrLn greet }
+ *
+ * // When there is not enough space, the content is broken up onto multiple lines
+ * console.log(pipe(prettyDo(statements), R.renderWidth(10)))
+ * // do name:_ <- getArgs
+ * //    let greet = "Hello, " <> name"
+ * //    putStrLn greet
  *
  * @category alternative combinators
  * @since 0.0.1
  */
-export const flatAlt = <A>(x: Doc<A>) => (y: Doc<A>): Doc<A> => FlatAlt(x, y)
+export const flatAlt = <A>(x: Doc<A>, y: Doc<A>): Doc<A> => FlatAlt(x, y)
 
 // -------------------------------------------------------------------------------------
 // alignment combinators
 // -------------------------------------------------------------------------------------
 
 /**
+ * The `align` combinator lays out a document with the nesting level set to
+ * the current column.
+ *
+ * @example
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * // As an example, the documents below will be placed one above the other
+ * // regardless of the current nesting level
+ *
+ * // Without `align`ment, the second line is simply placed below everything
+ * // that has been laid out so far
+ * const unaligned = D.hsep([
+ *   D.text('lorem'),
+ *   D.vsep([D.text('ipsum'), D.text('dolor')])
+ * ])
+ *
+ * console.log(R.render(unaligned))
+ * // lorem ipsum
+ * // dolor
+ *
+ * // With `align`ment, the `vsep`ed documents all start at the same column
+ * const aligned = D.hsep([
+ *   D.text('lorem'),
+ *   D.align(D.vsep([D.text('ipsum'), D.text('dolor')]))
+ * ])
+ *
+ * console.log(R.render(aligned))
+ * // lorem ipsum
+ * //       dolor
+ *
  * @category alignment combinators
  * @since 0.0.1
  */
 export const align = <A>(doc: Doc<A>): Doc<A> => column((k) => nesting((i) => nest(k - i)(doc)))
 
 /**
+ * The `hang` combinator lays out a document with the nesting level set to
+ * the *current column* plus the specified `indent`. Negative values for `indent`
+ * are allowed and decrease the nesting level accordingly.
+ *
+ * This differs from the `nest` combinator, which is based on the *current
+ * nesting level* plus the specified `indent`. When you're not sure, try the more
+ * efficient combinator (`nest`) first.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([
+ *   D.text('prefix'),
+ *   pipe(D.reflow('Indenting these words with hang'), D.hang(4))
+ * ])
+ *
+ * console.log(pipe(doc, R.renderWidth(24)))
+ * // prefix Indenting these
+ * //            words with
+ * //            hang
+ *
  * @category alignment combinators
  * @since 0.0.1
  */
 export const hang = (indent: number): (<A>(doc: Doc<A>) => Doc<A>) => flow(nest(indent), align)
 
 /**
+ * The `indent` combinator indents a document by the specified `indent`
+ * beginning from the current cursor position.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([
+ *   D.text('prefix'),
+ *   pipe(D.reflow('The indent function indents these words!'), D.indent(4))
+ * ])
+ *
+ * console.log(pipe(doc, R.renderWidth(24)))
+ * //  prefix    The indent
+ * //            function
+ * //            indents these
+ * //            words!
+ *
  * @category alignment combinators
  * @since 0.0.1
  */
 export const indent = (indent: number) => <A>(doc: Doc<A>): Doc<A> =>
-  hang(indent)(Cat(spaces(indent), doc))
+  pipe(Cat<A>(spaces(indent), doc), hang(indent))
 
 /**
+ * The `encloseSep` combinator concatenates a list of documents, separating
+ * each document in the list using the specified `sep` document. After
+ * concatenation, the resulting document is enclosed by the specified `left`
+ * and `right` documents.
+ *
+ * To place the `sep` document at the end of each list entry, see the
+ * `punctuate` combinator.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([
+ *   D.text('list'),
+ *   D.align(
+ *     pipe(
+ *       ['1', '20', '300', '4000'],
+ *       RA.map<string, Doc<never>>((n) => (n.length === 1 ? D.char(n) : D.text(n))),
+ *       D.encloseSep(D.lbracket, D.rbracket, D.comma)
+ *     )
+ *   )
+ * ])
+ *
+ * // The documents are laid out horizontally if that fits the page:
+ * console.log(pipe(doc, R.renderWidth(80)))
+ * // list [1,20,300,4000]
+ *
+ * // Otherwise they are laid out vertically, with separators put in the front:
+ * console.log(pipe(doc, R.renderWidth(10)))
+ * // list [1
+ * //      ,20
+ * //      ,300
+ * //      ,4000]
+ *
  * @category alignment combinators
  * @since 0.0.1
  */
@@ -872,7 +1100,21 @@ export const encloseSep = <A>(left: Doc<A>, right: Doc<A>, sep: Doc<A>) => (
  * braces as the enclosure for a list of documents.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = pipe(
+ *   ['1', '20', '300', '4000'],
+ *   RA.map<string, Doc<never>>((n) => (n.length === 1 ? D.char(n) : D.text(n))),
+ *   D.list
+ * )
+ *
+ * console.log(pipe(doc, R.renderWidth(80)))
+ * // [1, 20, 300, 4000]
  *
  * @category alignment combinators
  * @since 0.0.1
@@ -880,7 +1122,7 @@ export const encloseSep = <A>(left: Doc<A>, right: Doc<A>, sep: Doc<A>) => (
 export const list = <A>(docs: ReadonlyArray<Doc<A>>): Doc<A> =>
   pipe(
     docs,
-    encloseSep(flatAlt<A>(Char('[ '))(lbracket), flatAlt<A>(Char(' ]'))(rbracket), Char(', ')),
+    encloseSep(flatAlt<A>(char('[ '), lbracket), flatAlt<A>(char(' ]'), rbracket), char(', ')),
     group
   )
 
@@ -888,13 +1130,30 @@ export const list = <A>(docs: ReadonlyArray<Doc<A>>): Doc<A> =>
  * A Haskell-inspired variant of `encloseSep` that uses a comma as the separator and
  * parentheses as the enclosure for a list of documents.
  *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = pipe(
+ *   ['1', '20', '300', '4000'],
+ *   RA.map<string, Doc<never>>((n) => (n.length === 1 ? D.char(n) : D.text(n))),
+ *   D.tupled
+ * )
+ *
+ * console.log(pipe(doc, R.renderWidth(80)))
+ * // (1, 20, 300, 4000)
+ *
  * @category alignment combinators
  * @since 0.0.1
  */
 export const tupled = <A>(docs: ReadonlyArray<Doc<A>>): Doc<A> =>
   pipe(
     docs,
-    encloseSep(flatAlt<A>(Char('( '))(lparen), flatAlt<A>(Char(' )'))(rparen), Char(', ')),
+    encloseSep(flatAlt<A>(char('( '), lparen), flatAlt<A>(char(' )'), rparen), char(', ')),
     group
   )
 
@@ -903,18 +1162,109 @@ export const tupled = <A>(docs: ReadonlyArray<Doc<A>>): Doc<A> =>
 // -------------------------------------------------------------------------------------
 
 /**
+ * The `column` combinator lays out a document depending upon the column at which
+ * the document starts.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * // Example 1:
+ * const example1 = D.column((l) => D.hsep([D.text('Columns are'), D.text(`${l}-based.`)]))
+ *
+ * console.log(R.render(example1))
+ * // Columns are 0-based.
+ *
+ * // Example 2:
+ * const doc = D.hsep([
+ *   D.text('prefix'),
+ *   D.column((l) => D.text(`| <- column ${l}`))
+ * ])
+ *
+ * const example2 = D.vsep(
+ *   pipe(
+ *     [0, 4, 8],
+ *     RA.map((n) => D.indent(n)(doc))
+ *   )
+ * )
+ *
+ * console.log(R.render(example2))
+ * // prefix | <- column 7
+ * //     prefix | <- column 11
+ * //         prefix | <- column 15
+ *
  * @category reactive/conditional combinators
  * @since 0.0.1
  */
 export const column: <A>(react: (position: number) => Doc<A>) => Doc<A> = Column
 
 /**
+ * The `nesting` combinator lays out a document depending upon the current
+ * nesting level (i.e., the current indentation of the document).
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([D.text('prefix'), D.nesting((l) => D.brackets(D.text(`Nested: ${l}`)))])
+ *
+ * const example = D.vsep(
+ *   pipe(
+ *     [0, 4, 8],
+ *     RA.map((n) => D.indent(n)(doc))
+ *   )
+ * )
+ *
+ * console.log(R.render(example))
+ * // prefix [Nested: 0]
+ * //     prefix [Nested: 4]
+ * //         prefix [Nested: 8]
+ *
  * @category reactive/conditional combinators
  * @since 0.0.1
  */
 export const nesting: <A>(react: (level: number) => Doc<A>) => Doc<A> = Nesting
 
 /**
+ * The `width` combinator makes the column width of a document available to
+ * the document while rendering.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const annotate = <A>(doc: Doc<A>): Doc<A> =>
+ *   pipe(
+ *     D.brackets(doc),
+ *     D.width((w) => D.text(` <- width: ${w}`))
+ *   )
+ *
+ * const docs = [
+ *   D.text('---'),
+ *   D.text('------'),
+ *   pipe(D.text('---'), D.indent(3)),
+ *   D.vsep([D.text('---'), pipe(D.text('---'), D.indent(4))])
+ * ]
+ *
+ * const doc = D.align(D.vsep(pipe(docs, RA.map(annotate))))
+ *
+ * console.log(R.render(doc))
+ * // [---] <- width: 5
+ * // [------] <- width: 8
+ * // [   ---] <- width: 8
+ * // [---
+ * //     ---] <- width: 8
+ *
  * @category reactive/conditional combinators
  * @since 0.0.1
  */
@@ -927,6 +1277,39 @@ export const width = <A>(react: (width: number) => Doc<A>) => (doc: Doc<A>): Doc
   )
 
 /**
+ * The `pageWidth` combinator lays out a document according to the document's
+ * `PageWidth`, if specified.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ * import * as PW from 'prettyprinter-ts/lib/PageWidth'
+ *
+ * const doc = D.hsep([
+ *   D.text('prefix'),
+ *   D.pageWidth(
+ *     PW.match({
+ *       AvailablePerLine: (lw, rf) => D.brackets(D.text(`Width: ${lw}, ribbon fraction: ${rf}`)),
+ *       Unbounded: () => D.empty
+ *     })
+ *   )
+ * ])
+ *
+ * const example = D.vsep(
+ *   pipe(
+ *     [0, 4, 8],
+ *     RA.map((n) => pipe(doc, D.indent(n)))
+ *   )
+ * )
+ *
+ * console.log(pipe(example, R.renderWidth(32)))
+ * // prefix [Width: 32, ribbon fraction: 1]
+ * //     prefix [Width: 32, ribbon fraction: 1]
+ * //         prefix [Width: 32, ribbon fraction: 1]
+ *
  * @category reactive/conditional combinators
  * @since 0.0.1
  */
@@ -941,7 +1324,18 @@ export const pageWidth: <A>(react: (pageWidth: PageWidth) => Doc<A>) => Doc<A> =
  * a binary function.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = pipe(
+ *   [D.char('a'), D.char('b')],
+ *   D.concatWith(D.appendWithSpace)
+ * )
+ *
+ * console.log(R.render(doc))
+ * // a b
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -959,7 +1353,13 @@ export const concatWith: <A>(
  * `space` between them.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.appendWithSpace(D.char('a'), D.char('b'))
+ *
+ * console.log(R.render(doc))
+ * // a b
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -971,7 +1371,14 @@ export const appendWithSpace: <A>(x: Doc<A>, y: Doc<A>) => Doc<A> = (x, y) => Ca
  * `line` between them.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.appendWithLine(D.char('a'), D.char('b'))
+ *
+ * console.log(R.render(doc))
+ * // a
+ * // b
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -983,7 +1390,17 @@ export const appendWithLine: <A>(x: Doc<A>, y: Doc<A>) => Doc<A> = (x, y) => Cat
  * `lineBreak` between them.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.appendWithLineBreak(D.char('a'), D.char('b'))
+ *
+ * console.log(R.render(doc))
+ * // a
+ * // b
+ *
+ * console.log(R.render(D.group(doc)))
+ * // ab
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -996,7 +1413,19 @@ export const appendWithLineBreak: <A>(x: Doc<A>, y: Doc<A>) => Doc<A> = (x, y) =
  * `softLine` between them.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.appendWithSoftLine(D.char('a'), D.char('b'))
+ *
+ * console.log(R.render(doc))
+ * // a b
+ *
+ * console.log(pipe(doc, R.renderWidth(1)))
+ * // a
+ * // b
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -1009,7 +1438,19 @@ export const appendWithSoftLine: <A>(x: Doc<A>, y: Doc<A>) => Doc<A> = (x, y) =>
  * `softLineBreak` between them.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.appendWithSoftLineBreak(D.char('a'), D.char('b'))
+ *
+ * console.log(R.render(doc))
+ * // ab
+ *
+ * console.log(pipe(doc, R.renderWidth(1)))
+ * // a
+ * // b
  *
  * @category concatenation combinators
  * @since 0.0.1
@@ -1025,11 +1466,23 @@ export const appendWithSoftLineBreak: <A>(x: Doc<A>, y: Doc<A>) => Doc<A> = (x, 
  * The `hsep` combinator concatenates all documents in a list horizontally by placing
  * a `space` between each pair of documents.
  *
- * For automatic line breaks, consider using `fillSep` instead.
+ * For automatic line breaks, consider using `fillSep`.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
  *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep(D.words('lorem ipsum dolor sit amet'))
+ *
+ * console.log(pipe(doc, R.renderWidth(80)))
+ * // lorem ipsum dolor sit amet
+ *
+ * // The `hsep` combinator will not introduce line breaks on its own, even when
+ * // the page is too narrow
+ * console.log(pipe(doc, R.renderWidth(5)))
+ * // lorem ipsum dolor sit amet
  *
  * @category sep combinators
  * @since 0.0.1
@@ -1041,17 +1494,36 @@ export const hsep: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(appen
  * undoes the line breaks inserted by `vsep`, the documents are separated with a space
  * instead.
  *
- * Using `vsep` alone yields:
+ * When a `vsep` is `group`ed, the documents are separated with a `space` if the layout
+ * fits the page, otherwise nothing is done. See the `sep` convenience function for this
+ * use case.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
- * // However, `group`ing a `vsep` separates the doucments with a `space` if they fit the
- * // page (and does nothing otherwise). See the `sep` convenience function for this use
- * // case.
+ * const unaligned = D.hsep([
+ *   D.text('prefix'),
+ *   D.vsep(D.words('text to lay out'))
+ * ])
+ *
+ * console.log(R.render(unaligned))
+ * // prefix text
+ * // to
+ * // lay
+ * // out
  *
  * // The `align` function can be used to align the documents under their first element
- * // TODO examples
+ * const aligned = D.hsep([
+ *   D.text('prefix'),
+ *   D.align(D.vsep(D.words('text to lay out')))
+ * ])
+ *
+ * console.log(R.render(aligned))
+ * // prefix text
+ * //        to
+ * //        lay
+ * //        out
  *
  * @category sep combinators
  * @since 0.0.1
@@ -1066,13 +1538,32 @@ export const vsep: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(appen
  * will be separated with a `space` instead of newlines. See `fillCat` if you do not want
  * a `space`.
  *
- * As an example, let's print some words to fill the line:
- *
  * @example
- * // TODO examples
+ * import { intercalate } from 'fp-ts/Foldable'
+ * import { pipe } from 'fp-ts/function'
+ * import { monoidString } from 'fp-ts/Monoid'
+ * import * as RA from 'fp-ts/ReadonlyArray'
  *
- * // Printing the same document with a width of only 40 yields
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const intercalateSpace = (xs: ReadonlyArray<string>): string =>
+ *   intercalate(monoidString, RA.Foldable)(' ', xs)
+ *
+ * const words = pipe(RA.replicate(4, 'lorem ipsum dolor sit amet'), intercalateSpace, D.words)
+ *
+ * const doc = D.hsep([D.text('Docs:'), D.fillSep(words)])
+ *
+ * console.log(pipe(doc, R.renderWidth(80)))
+ * // Docs: lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor
+ * // sit amet lorem ipsum dolor sit amet
+ *
+ * // If the page width is decreased to 40, printing the same document yields:
+ * console.log(pipe(doc, R.renderWidth(40)))
+ * // Docs: lorem ipsum dolor sit amet lorem
+ * // ipsum dolor sit amet lorem ipsum dolor
+ * // sit amet lorem ipsum dolor sit amet
+ *
  *
  * @category sep combinators
  * @since 0.0.1
@@ -1086,10 +1577,25 @@ export const fillSep: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(ap
  * another.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
  *
- * // When there is not enough space, the documents are separated by newlines
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([
+ *   D.text('prefix'),
+ *   D.sep(D.words('text to lay out'))
+ * ])
+ *
+ * console.log(R.render(doc))
+ * // prefix text to lay out
+ *
+ * // If the page width is too narrow, documents are separated by newlines
+ * console.log(pipe(doc, R.renderWidth(20)))
+ * // prefix text
+ * // to
+ * // lay
+ * // out
  *
  * @category sep combinators
  * @since 0.0.1
@@ -1103,10 +1609,16 @@ export const sep: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = flow(vsep, group)
 /**
  * The `hcat` combinator concatenates all documents in a list horizontally without
  * any spacing. It is provided for completeness, but is identical in function to
- * the `Semigroup` instance for `Doc`.
+ * folding an array of documents using the `Semigroup` instance for `Doc`.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hcat(D.words('lorem ipsum dolor'))
+ *
+ * console.log(R.render(doc))
+ * // loremipsumdolor
  *
  * @category cat combinators
  * @since 0.0.1
@@ -1118,9 +1630,16 @@ export const hcat: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(Cat)
  * output is grouped then the line breaks are removed.
  *
  * @example
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
  *
- * @see `cat` - built-in shortcut for a `vcat` followed by a `group`
+ * const doc = D.vcat(D.words('lorem ipsum dolor'))
+ *
+ * console.log(R.render(doc))
+ * // lorem
+ * // ipsum
+ * // dolor
+ *
  * @category cat combinators
  * @since 0.0.1
  */
@@ -1136,7 +1655,25 @@ export const vcat: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(appen
  * separated with `empty` instead of newlines. See `fillSep` if you want a `space` instead.
  *
  * @example
- * // TODO examples
+ * import { intercalate } from 'fp-ts/Foldable'
+ * import { pipe } from 'fp-ts/function'
+ * import { monoidString } from 'fp-ts/Monoid'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const intercalateSpace = (xs: ReadonlyArray<string>): string =>
+ *   intercalate(monoidString, RA.Foldable)(' ', xs)
+ *
+ * const words = pipe(RA.replicate(4, 'lorem ipsum dolor sit amet'), intercalateSpace, D.words)
+ *
+ * // Compare the behavior of `fillCat` and fillSep` when `group`ed
+ * const doc = D.hsep([D.text('Grouped:'), D.group(D.fillCat(words))])
+ *
+ * console.log(R.render(doc))
+ * // Grouped: loremipsumdolorsitametloremipsumdolorsitametloremipsumdolorsitametlorem
+ * // ipsumdolorsitamet
  *
  * @category cat combinators
  * @since 0.0.1
@@ -1152,10 +1689,25 @@ export const fillCat: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = concatWith(
  * another.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
  *
- * // When there is not enough space, the documents are separated by newlines
- * // TODO examples
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.hsep([
+ *   D.text('Docs:'),
+ *   D.cat(D.words('lorem ipsum dolor'))
+ * ])
+ *
+ * console.log(R.render(doc))
+ * // Docs: loremipsumdolor
+ *
+ * // If the document exceeds the width of the page, the documents are rendered
+ * // one above another
+ * console.log(pipe(doc, R.renderWidth(10)))
+ * // Docs: lorem
+ * // ipsum
+ * // dolor
  *
  * @category cat combinators
  * @since 0.0.1
@@ -1172,15 +1724,38 @@ export const cat: <A>(docs: ReadonlyArray<Doc<A>>) => Doc<A> = flow(vcat, group)
  * of `x` is already larger than the specified `width`, nothing is appended.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * type Signature = [name: string, type: string]
+ *
+ * const signatures: ReadonlyArray<Signature> = [
+ *   ['empty', 'Doc'],
+ *   ['nest', 'Int -> Doc -> Doc'],
+ *   ['fillSep', '[Doc] -> Doc']
+ * ]
+ *
+ * const prettySignature = <A>([name, type]: Signature): Doc<A> =>
+ *   D.hsep([pipe(D.text<never>(name), D.fill(5)), D.text('::'), D.text(type)])
+ *
+ * const doc = D.hsep([D.text('let'), D.align(D.vcat(pipe(signatures, RA.map(prettySignature))))])
+ *
+ * console.log(R.render(doc))
+ * // let empty :: Doc
+ * //     nest :: Int -> Doc -> Doc
+ * //     fillSep :: [Doc] -> Doc
  *
  * @category filler combinators
  * @since 0.0.1
  */
-export const fill: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (n) => (x) =>
+export const fill: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (lw) => (x) =>
   pipe(
     x,
-    width((w) => spaces(n - w))
+    width((w) => spaces(lw - w))
   )
 
 /**
@@ -1190,15 +1765,39 @@ export const fill: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (n) => (x) =>
  * the specified `width` and a `line` is appended.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ * import * as RA from 'fp-ts/ReadonlyArray'
+ *
+ * import type { Doc } from 'prettyprinter-ts/lib/Doc'
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * type Signature = [name: string, type: string]
+ *
+ * const signatures: ReadonlyArray<Signature> = [
+ *   ['empty', 'Doc'],
+ *   ['nest', 'Int -> Doc -> Doc'],
+ *   ['fillSep', '[Doc] -> Doc']
+ * ]
+ *
+ * const prettySignature = <A>([name, type]: Signature): Doc<A> =>
+ *   D.hsep([pipe(D.text<never>(name), D.fillBreak(5)), D.text('::'), D.text(type)])
+ *
+ * const doc = D.hsep([D.text('let'), D.align(D.vcat(pipe(signatures, RA.map(prettySignature))))])
+ *
+ * console.log(R.render(doc))
+ * // let empty :: Doc
+ * //     nest :: Int -> Doc -> Doc
+ * //     fillSep
+ * //          :: [Doc] -> Doc
  *
  * @category filler combinators
  * @since 0.0.1
  */
-export const fillBreak: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (n) => (x) =>
+export const fillBreak: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (lw) => (x) =>
   pipe(
     x,
-    width((w) => (w > n ? nest(n)(lineBreak) : spaces(n - w)))
+    width((w) => (w > lw ? nest(lw)(lineBreak) : spaces(lw - w)))
   )
 
 // -------------------------------------------------------------------------------------
@@ -1211,7 +1810,27 @@ export const fillBreak: (width: number) => <A>(doc: Doc<A>) => Doc<A> = (n) => (
  * entries, which can be observed if the result is oriented vertically.
  *
  * @example
- * // TODO examples - vertical one
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const docs = pipe(
+ *   D.words<never>('lorem ipsum dolor sit amet'),
+ *   D.punctuate(D.comma)
+ * )
+ *
+ * console.log(R.render(D.hsep(docs)))
+ * // lorem, ipsum, dolor, sit, amet
+ *
+ * // The separators are put at the end of the entries, which can be better
+ * // visualzied if the documents are rendered vertically
+ * console.log(R.render(D.vsep(docs)))
+ * // lorem,
+ * // ipsum,
+ * // dolor,
+ * // sit,
+ * // amet
  *
  * @category general combinators
  * @since 0.0.1
@@ -1229,7 +1848,15 @@ export const punctuate = <A>(punctuator: Doc<A>) => (
  * documents using `Cat`.
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = pipe(D.char('-'), D.enclose(D.char('A'), D.char('Z')))
+ *
+ * console.log(R.render(doc))
+ * // A-Z
  *
  * @category general combinators
  * @since 0.0.1
@@ -1241,11 +1868,22 @@ export const enclose = <A>(left: Doc<A>, right: Doc<A>) => (doc: Doc<A>): Doc<A>
  * The `surround` combinator surrounds a document `x` in between `left` and `right`
  * documents using `Cat`.
  *
- * `surround` is merely a reordering of the arguments to `enclose`, but allows for
- * useful definitions such as:
  *
  * @example
- * // TODO examples
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * // The `surround` combinator is just a reordering of the arguments to `enclose`,
+ * // but allows for useful definitions such as:
+ * const doc = pipe(
+ *   D.words<never>('prettyprinter-ts lib Doc'),
+ *   D.concatWith(D.surround(D.slash))
+ * )
+ *
+ * console.log(R.render(doc))
+ * // prettyprinter-ts/lib/Doc
  *
  * @category general combinators
  * @since 0.0.1
@@ -1254,18 +1892,25 @@ export const surround = <A>(doc: Doc<A>) => (left: Doc<A>, right: Doc<A>): Doc<A
   Cat(left, Cat(doc, right))
 
 /**
+ * The `spaces` combinator lays out a document containing `n` spaces. Negative values
+ * for `n` count as `0` spaces.
+ *
+ * @example
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.brackets(D.dquotes(D.spaces(5)))
+ *
+ * console.log(R.render(doc))
+ * // ["     "]
+ *
  * @category general combinators
  * @since 0.0.1
  */
 export const spaces = <A>(n: number): Doc<A> => {
-  switch (n) {
-    case 0:
-      return Empty
-    case 1:
-      return Char(' ')
-    default:
-      return Text(textSpaces(n))
-  }
+  if (n <= 0) return Empty
+  if (n === 1) return Char(' ')
+  return Text(textSpaces(n))
 }
 
 // -------------------------------------------------------------------------------------
@@ -1360,7 +2005,7 @@ export const Functor: Functor1<URI> = {
 export const alterAnnotations = <A, B>(
   f: (a: A) => ReadonlyArray<B>
 ): ((doc: Doc<A>) => Doc<B>) => {
-  const go: (x: Doc<A>) => Doc<B> = fold<A, Doc<B>>({
+  const go: (x: Doc<A>) => Doc<B> = match<A, Doc<B>>({
     Fail: () => Fail,
     Empty: () => Empty,
     Char: (c) => Char(c),
@@ -1424,7 +2069,57 @@ export const reAnnotate: <A, B>(f: (a: A) => B) => (doc: Doc<A>) => Doc<B> = (f)
   alterAnnotations(flow(f, RA.of))
 
 /**
+ * Constructs a string containing `n` space characters.
+ *
  * @category utils
  * @since 0.0.1
  */
 export const textSpaces = (n: number): string => pipe(RA.replicate(n, ' '), M.fold(M.monoidString))
+
+/**
+ * Splits a string of words into individual `Text` documents using the
+ * specified `char` to split on (defaults to `' '`).
+ *
+ * @example
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.tupled(D.words('Lorem ipsum dolor'))
+ *
+ * console.log(R.render(doc))
+ * // (lorem, ipsum, dolor)
+ *
+ * @category utils
+ * @since 0.0.1
+ */
+export const words = <A>(s: string, char = ' '): ReadonlyArray<Doc<A>> =>
+  pipe(s.split(char), RA.map<string, Doc<A>>(text))
+
+/**
+ * Splits a string of words into individual `Text` documents using the
+ * specified `char` to split on (defaults to `' '`). In addition, a
+ * `softLine` is inserted in between each word so that if the text
+ * exceeds the available width it will be broken into multiple lines.
+ *
+ * @example
+ * import { pipe } from 'fp-ts/function'
+ *
+ * import * as D from 'prettyprinter-ts/lib/Doc'
+ * import * as R from 'prettyprinter-ts/lib/Render'
+ *
+ * const doc = D.reflow(
+ *   'Lorem ipsum dolor sit amet, consectetur adipisicing elit, ' +
+ *     'sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+ * )
+ *
+ * console.log(pipe(doc, R.renderWidth(32)))
+ * // Lorem ipsum dolor sit amet,
+ * // consectetur adipisicing elit,
+ * // sed do eiusmod tempor incididunt
+ * // ut labore et dolore magna
+ * // aliqua.
+ *
+ * @category utils
+ * @since 0.0.1
+ */
+export const reflow = <A>(s: string, char = ' '): Doc<A> => pipe(words<A>(s, char), fillSep)

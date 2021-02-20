@@ -1,15 +1,17 @@
 {
-  "name": "project-template",
+  "name": "prettyprinter-ts",
   "version": "0.0.1",
   "main": "index.js",
   "author": "Maxwell Brown <maxwellbrown1990@gmail.com> (https://github.com/IMax153)",
+  "homepage": "https://github.com/IMax153/prettyprinter-ts",
   "license": "MIT",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "ts-node -O '{\"module\": \"commonjs\"}' src",
+    "dev": "ts-node-transpile-only -O '{\"module\": \"commonjs\"}' src",
     "test": "jest",
-    "test:watch": "jest --watchAll"
+    "test:watch": "jest --watchAll",
+    "docs": "docs-ts"
   },
   "dependencies": {
     "fp-ts": "^2.9.5"
@@ -19,6 +21,7 @@
     "@types/node": "^14.14.25",
     "@typescript-eslint/eslint-plugin": "^4.14.2",
     "@typescript-eslint/parser": "^4.14.2",
+    "docs-ts": "^0.6.3",
     "eslint": "^7.19.0",
     "eslint-config-airbnb-typescript": "^12.3.1",
     "eslint-config-prettier": "^7.2.0",
